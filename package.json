@@ -1,0 +1,15 @@
+{
+  "name": "digital-art-auction-platform",
+  "version": "1.0.0",
+  "description": "Decentralized digital art auction platform",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm start",
+    "test:contracts": "cd contracts && npx hardhat test",
+    "deploy:local": "cd contracts && npx hardhat run scripts/deploy.js --network localhost",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install && cd ../contracts && npm install"
+  },
+  "keywords": ["blockchain", "nft", "auction", "ethereum"],
+  "author": "Thang",
+  "license": "MIT"
+}
