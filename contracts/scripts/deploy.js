@@ -24,28 +24,54 @@ async function main() {
   const auctionAddress = await auction.getAddress();
   console.log(`✅ Auction deployed to: ${auctionAddress}`);
 
-  // Verify deployment với các function thực tế
+  // Verify deployment
   console.log("\n🔍 Verifying contracts...");
   
   try {
+    // Test currentTokenId function
     const currentTokenId = await artToken.currentTokenId();
     console.log(`🎨 Current ArtToken ID: ${currentTokenId}`);
   } catch (error) {
-    console.log(`🎨 ArtToken currentTokenId function: OK`);
+    console.log(`ℹ️ ArtToken currentTokenId: ${error.message}`);
   }
 
   // Test mint một NFT
   console.log("\n🧪 Testing NFT mint...");
   try {
     const mintTx = await artToken.safeMint(deployer.address);
-    await mintTx.wait();
+    const receipt = await mintTx.wait();
     console.log(`✅ Test NFT minted successfully`);
     
-    const newTokenId = await artToken.currentTokenId();
-    console.log(`🎨 New ArtToken ID: ${newTokenId}`);
-    console.log(`👤 Owner of token 1: ${await artToken.ownerOf(1)}`);
+    // Lấy token ID từ event thay vì gọi ownerOf
+    let tokenId = null;
+    if (receipt.logs) {
+      const iface = new ethers.Interface([
+        "event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)"
+      ]);
+      
+      for (let log of receipt.logs) {
+        try {
+          const parsedLog = iface.parseLog(log);
+          if (parsedLog && parsedLog.name === 'Transfer') {
+            tokenId = parsedLog.args.tokenId.toString();
+            break;
+          }
+        } catch (e) {
+          // Continue checking other logs
+        }
+      }
+    }
+    
+    if (tokenId) {
+      console.log(`🎨 New Token ID minted: ${tokenId}`);
+      // Bây giờ mới gọi ownerOf vì token đã tồn tại
+      console.log(`👤 Owner of token ${tokenId}: ${await artToken.ownerOf(tokenId)}`);
+    } else {
+      console.log(`🎨 NFT minted but couldn't extract token ID from events`);
+    }
+    
   } catch (error) {
-    console.log(`⚠️ Test mint skipped: ${error.message}`);
+    console.log(`⚠️ Test mint error: ${error.message}`);
   }
 
   console.log("\n📋 Contract Addresses:");
@@ -70,7 +96,7 @@ async function main() {
   // Tạo file env cho frontend
   const envContent = `REACT_APP_ART_TOKEN_ADDRESS=${artTokenAddress}
 REACT_APP_AUCTION_ADDRESS=${auctionAddress}
-REACT_APP_BACKEND_URL=http://localhost:5000
+REACT_APP_BACKEND_URL=http://localhost:5000/api
 REACT_APP_NETWORK_NAME=localhost`;
 
   fs.writeFileSync('../frontend/.env', envContent);

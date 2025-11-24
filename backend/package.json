@@ -8,14 +8,16 @@
     "test": "echo \"Chạy thử nghiệm hợp đồng từ thư mục gốc\""
   },
   "dependencies": {
-    "express": "^5.1.0",
-    "mongoose": "^8.19.3",
+    "axios": "^1.13.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "multer": "^2.0.2",
-    "ipfs-http-client": "^60.0.1",
     "ethers": "^6.15.0",
-    "axios": "^1.13.2",
+    "express": "^5.1.0",
+    "ipfs-http-client": "^60.0.1",
+    "mongoose": "^8.19.3",
+    "multer": "^2.0.2"
+  },
+  "devDependencies": {
     "nodemon": "^3.1.11"
   }
 }

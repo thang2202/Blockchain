@@ -468,3 +468,46 @@ body {
 .mt-1 { margin-top: 8px; }
 .mt-2 { margin-top: 16px; }
 .mt-3 { margin-top: 24px; }
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.account-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #e8f4fd;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid #b3d9ff;
+}
+
+.account-address {
+  font-weight: 500;
+  color: #0066cc;
+}
+
+.disconnect-btn {
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.3s ease;
+}
+
+.disconnect-btn:hover {
+  background: #ff5252;
+  transform: scale(1.1);
+}
+

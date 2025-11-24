@@ -6,6 +6,8 @@ import multer from 'multer';
 import { create } from 'ipfs-http-client';
 import { ethers } from 'ethers';
 import axios from 'axios';
+import fs from 'fs';
+import path from 'path';
 
 dotenv.config();
 
@@ -19,12 +21,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true
 }));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }
-));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }
+));
 app.use('/uploads', express.static('uploads'));
-
 // Kết nối MongoDB
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/art-auction')
   .then(() => console.log('✅ Kết nối đến MongoDB'))
@@ -109,96 +109,136 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Tạo thư mục uploads nếu chưa tồn tại
+const uploadsDir = './uploads';
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
 // Upload artwork và tạo metadata
 app.post('/api/upload-artwork', upload.single('image'), async (req, res) => {
-  try {
-    console.log('📨 Nhận request upload artwork...');
-    console.log('📝 Body:', req.body);
-    console.log('📁 File:', req.file);
+  console.log('📨 Nhận yêu cầu upload artwork...');
+  console.log('📝 Body:', req.body);
+  console.log('🖼️ File:', req.file);
 
-    const { name, description, artist, artistAddress } = req.body;
+  try {
+    const { name, description, artist = 'Digital Artist', artistAddress } = req.body;
     
     if (!req.file) {
       console.log('❌ Không có file được upload');
-      return res.status(400).json({ error: 'Không có tệp hình ảnh nào được cung cấp' });
-    }
-
-    // Kiểm tra kết nối IPFS
-    try {
-      const ipfsVersion = await ipfs.version();
-      console.log('✅ IPFS connected:', ipfsVersion);
-    } catch (ipfsError) {
-      console.error('❌ IPFS connection failed:', ipfsError);
-      return res.status(500).json({ 
-        error: 'IPFS không kết nối được', 
-        details: 'Hãy chắc chắn rằng IPFS daemon đang chạy: ipfs daemon'
+      return res.status(400).json({ 
+        success: false,
+        error: 'Không có file hình ảnh được cung cấp' 
       });
     }
 
-    console.log('📤 Đang tải tác phẩm lên IPFS...');
+    if (!name) {
+      console.log('❌ Thiếu tên tác phẩm');
+      // Xóa file tạm nếu có lỗi
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(400).json({ 
+        success: false,
+        error: 'Tên tác phẩm là bắt buộc' 
+      });
+    }
 
-    // Đọc file từ disk thay vì sử dụng buffer
-    const fs = await import('fs');
-    const imagePath = req.file.path;
-    
-    // Đọc file dưới dạng buffer
-    const imageBuffer = fs.readFileSync(imagePath);
-    console.log('📊 Kích thước file:', imageBuffer.length, 'bytes');
+    console.log('📤 Đang upload lên IPFS...');
+
+    // Kiểm tra kết nối IPFS
+    try {
+      await ipfs.version();
+      console.log('✅ IPFS connected');
+    } catch (ipfsError) {
+      console.error('❌ IPFS không kết nối:', ipfsError);
+      return res.status(500).json({ 
+        success: false,
+        error: 'IPFS daemon không chạy. Chạy lệnh: ipfs daemon'
+      });
+    }
+
+    // Đọc file từ disk
+    const imageBuffer = fs.readFileSync(req.file.path);
+    console.log(`📊 Kích thước file: ${imageBuffer.length} bytes`);
     
     // Upload image to IPFS
-    const imageResult = await ipfs.add(imageBuffer);
+    let imageResult;
+    try {
+      imageResult = await ipfs.add(imageBuffer);
+      console.log('🖼️ Image IPFS Hash:', imageResult.cid.toString());
+    } catch (ipfsError) {
+      console.error('❌ Lỗi upload IPFS:', ipfsError);
+      // Xóa file tạm
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(500).json({ 
+        success: false,
+        error: 'Lỗi upload lên IPFS: ' + ipfsError.message
+      });
+    }
+
     const imageIpfsHash = imageResult.cid.toString();
-    console.log('🖼️ Image IPFS Hash:', imageIpfsHash);
 
     // Create metadata
     const metadata = {
-      name: name || 'Tác phẩm vô danh',
+      name: name,
       description: description || 'Không có mô tả',
       image: `ipfs://${imageIpfsHash}`,
-      artist: artist || 'Nghệ sĩ vô danh',
-      artistAddress: artistAddress || '0x0000000000000000000000000000000000000000',
-      createdAt: new Date().toISOString(),
-      attributes: []
+      artist: artist,
+      artistAddress: artistAddress,
+      createdAt: new Date().toISOString()
     };
 
+    console.log('📋 Metadata:', metadata);
+
     // Upload metadata to IPFS
-    const metadataResult = await ipfs.add(JSON.stringify(metadata));
-    const metadataIpfsHash = metadataResult.cid.toString();
-    console.log('📋 Metadata IPFS Hash:', metadataIpfsHash);
+    let metadataResult;
+    try {
+      metadataResult = await ipfs.add(JSON.stringify(metadata));
+      const metadataIpfsHash = metadataResult.cid.toString();
+      console.log('📄 Metadata IPFS Hash:', metadataIpfsHash);
 
-    // Xóa file tạm sau khi upload
-    fs.unlinkSync(imagePath);
-    console.log('🗑️ Đã xóa file tạm');
-
-    console.log('✅ Đã tải tác phẩm nghệ thuật lên thành công');
-
-    res.json({
-      success: true,
-      imageIpfsHash,
-      metadataIpfsHash,
-      metadata: {
-        ...metadata,
-        image: `https://ipfs.io/ipfs/${imageIpfsHash}`
+      // Xóa file tạm sau khi upload thành công
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
       }
-    });
+
+      console.log('✅ Upload thành công!');
+      
+      res.json({
+        success: true,
+        imageIpfsHash,
+        metadataIpfsHash,
+        metadata: {
+          ...metadata,
+          image: `https://ipfs.io/ipfs/${imageIpfsHash}`
+        }
+      });
+
+    } catch (metadataError) {
+      console.error('❌ Lỗi upload metadata:', metadataError);
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({ 
+        success: false,
+        error: 'Lỗi upload metadata: ' + metadataError.message
+      });
+    }
 
   } catch (error) {
-    console.error('❌ Lỗi tải lên:', error);
+    console.error('❌ Lỗi tổng quát:', error);
     
-    // Xóa file tạm nếu có lỗi
-    if (req.file && req.file.path) {
-      try {
-        const fs = await import('fs');
-        fs.unlinkSync(req.file.path);
-      } catch (deleteError) {
-        console.error('❌ Lỗi xóa file tạm:', deleteError);
-      }
+    // Đảm bảo xóa file tạm
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
     }
     
     res.status(500).json({ 
-      error: 'Lỗi tải lên tác phẩm nghệ thuật', 
-      details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      success: false,
+      error: 'Lỗi upload artwork: ' + error.message
     });
   }
 });
